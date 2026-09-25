@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      # Pinned by hand: ruff 0.16.0 grew its default ruleset from 59 rules to 413,
+      # which can turn an unchanged tree red. Renovate does not read versions
+      # inside a `run:` block, so bump it here yourself.
+      - name: Install ruff
+        run: "pip install --only-binary :all: ruff==0.16.6"
+      - name: Lint
+        run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13 is what action.yml installs for consumers, so it must be covered.
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: "pip install --only-binary :all: pytest==9.1.1"
+      - name: Test
+        run: pytest -v
+
+  action:
+    # The only job that runs action.yml itself. Lint and test never load it, so a
+    # broken output mapping or input wiring would leave both of them green.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run the action from this checkout
+        id: card
+        uses: ./
+        with:
+          # A real public profile with a badge and 100+ contests, so the chart, the
+          # badge line and all four outputs have something to show. This calls the
+          # live LeetCode API, the action's only data source.
+          username: sagargupta1610
+
+      - name: Assert the card parses and every output resolved
+        env:
+          RATING: ${{ steps.card.outputs.rating }}
+          BADGE: ${{ steps.card.outputs.badge }}
+          SOLVED: ${{ steps.card.outputs.solved }}
+          CONTESTS: ${{ steps.card.outputs.contests }}
+        run: |
+          set -euo pipefail
+          echo "rating=$RATING badge=$BADGE solved=$SOLVED contests=$CONTESTS"
+          test -s assets/leetcode.svg
+          python - assets/leetcode.svg <<'PY'
+          import sys
+          from xml.dom import minidom
+
+          root = minidom.parse(sys.argv[1]).documentElement
+          if root.tagName != "svg" or root.getAttribute("role") != "img":
+              sys.exit(f"{sys.argv[1]} is not an accessible SVG: <{root.tagName}>")
+          print(f"{sys.argv[1]} parses: {root.getAttribute('aria-label')}")
+          PY
+          for pair in "rating=$RATING" "badge=$BADGE" "solved=$SOLVED" "contests=$CONTESTS"; do
+            if [ -z "${pair#*=}" ]; then
+              echo "::error::output ${pair%%=*} resolved to an empty string"
+              exit 1
+            fi
+          done
+          echo "The card parses and all four outputs resolved."

@@ -1,0 +1,56 @@
+name: "LeetCode Card"
+description: "Render a self-hosted animated LeetCode contest rating card (SVG) into your repo"
+author: "Sagargupta16"
+
+branding:
+  icon: "trending-up"
+  color: "orange"
+
+inputs:
+  username:
+    description: "Your LeetCode username, as in leetcode.com/u/<username>"
+    required: true
+  output:
+    description: "Where to write the SVG, relative to the repository root"
+    required: false
+    default: "assets/leetcode.svg"
+  accent:
+    description: "Accent color as #rgb or #rrggbb: the rating line, the badge line and the heading"
+    required: false
+    default: "#f59e0b"
+  title:
+    description: "Card heading; {contests} is replaced with the number of rated contests attended"
+    required: false
+    default: "LEETCODE CONTEST RATING | {contests} CONTESTS"
+
+outputs:
+  rating:
+    description: "Current contest rating, rounded; empty if the user has no rated contest"
+    value: ${{ steps.card.outputs.rating }}
+  badge:
+    description: "Contest badge such as Knight or Guardian; empty if the user has none"
+    value: ${{ steps.card.outputs.badge }}
+  solved:
+    description: "Number of problems solved"
+    value: ${{ steps.card.outputs.solved }}
+  contests:
+    description: "Number of rated contests attended"
+    value: ${{ steps.card.outputs.contests }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.13"
+
+    - name: Render the LeetCode card
+      id: card
+      shell: bash
+      env:
+        LEETCODE_USERNAME: ${{ inputs.username }}
+        LEETCODE_OUTPUT: ${{ inputs.output }}
+        LEETCODE_ACCENT: ${{ inputs.accent }}
+        LEETCODE_TITLE: ${{ inputs.title }}
+      run: python "${{ github.action_path }}/leetcode_card.py"
